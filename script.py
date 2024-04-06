@@ -2,18 +2,16 @@ import json
 import spacy
 import pandas as pd
 import re
-import boto3
 
 # Assume that Spacy and its model are included in the Lambda Layer
 nlp = spacy.load("/opt/en_core_web_sm")
 
 
-def load_dictionary_from_s3(bucket_name, object_key):
-    """Load a dictionary of words from an S3 bucket."""
-    s3 = boto3.client('s3')
-    response = s3.get_object(Bucket=bucket_name, Key=object_key)
-    dictionary_data = json.load(response['Body'])
-    return dictionary_data
+def load_dictionary(json_filepath):
+    """Load a dictionary of words from a local JSON file."""
+    with open(json_filepath, 'r') as f:
+        data = json.load(f)
+    return data
 
 
 def process_text(text, data):
@@ -55,13 +53,12 @@ def process_text(text, data):
 
 def lambda_handler(event, context):
     """AWS Lambda function handler."""
-    # Assuming the event contains the S3 bucket and object key for the dictionary,
-    # and the text to process.
-    bucket_name = event['bucket_name']
-    object_key = event['object_key']
-    text = event['text']
+    # Path to the dictionary.json file included in the ZIP file uploaded to Lambda
+    # Adjust if your dictionary is in a subdirectory within the ZIP file
+    dictionary_path = 'dictionary.json'
+    text = event['text']  # Assuming 'text' is passed in the event
 
-    dictionary_data = load_dictionary_from_s3(bucket_name, object_key)
+    dictionary_data = load_dictionary(dictionary_path)
 
     new_text = process_text(text, dictionary_data)
 
