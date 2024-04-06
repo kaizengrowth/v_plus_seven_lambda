@@ -4,7 +4,7 @@ import pandas as pd
 import re
 
 # Assume that Spacy and its model are included in the Lambda Layer
-nlp = spacy.load("/opt/en_core_web_sm")
+nlp = spacy.load("en_core_web_sm")
 
 
 def load_dictionary(json_filepath):
@@ -53,10 +53,8 @@ def process_text(text, data):
 
 def lambda_handler(event, context):
     """AWS Lambda function handler."""
-    # Path to the dictionary.json file included in the ZIP file uploaded to Lambda
-    # Adjust if your dictionary is in a subdirectory within the ZIP file
+    text = event['text']
     dictionary_path = 'dictionary.json'
-    text = event['text']  # Assuming 'text' is passed in the event
 
     dictionary_data = load_dictionary(dictionary_path)
 
