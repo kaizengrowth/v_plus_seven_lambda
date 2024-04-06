@@ -2,38 +2,34 @@ import json
 import spacy
 import pandas as pd
 import re
-import string
-import sys
+import boto3
 
-# Assume that Spacy and its model are included in the Lambda deployment package
-# Or loaded from a Lambda Layer
-# nlp = spacy.load("/opt/en_core_web_sm")  # Path when using Lambda Layer
-nlp = spacy.load("en_core_web_sm")
+# Assume that Spacy and its model are included in the Lambda Layer
+nlp = spacy.load("/opt/en_core_web_sm")
 
 
-def load_dictionary(json_filepath):
-    with open(json_filepath, 'r') as f:
-        data = json.load(f)
-    return data
+def load_dictionary_from_s3(bucket_name, object_key):
+    """Load a dictionary of words from an S3 bucket."""
+    s3 = boto3.client('s3')
+    response = s3.get_object(Bucket=bucket_name, Key=object_key)
+    dictionary_data = json.load(response['Body'])
+    return dictionary_data
 
 
 def process_text(text, data):
+    """Process the given text to replace verbs based on the provided data."""
     df = pd.DataFrame(data)
     verbs_df = df[df['pos'] == 'v.'].reset_index(drop=True)
 
     text_without_punctuation = text.translate(
         str.maketrans('', '', string.punctuation))
     words = text_without_punctuation.split()
-    print(words)
 
     # Mapping original words to their lemmatized forms
     original_to_lemmatized = {
         word: nlp(word)[0].lemma_.upper() for word in words if nlp(word)[0].pos_ == 'VERB'
     }
 
-    print(original_to_lemmatized)
-
-    # Mapping from lemmatized verb to its replacement (the 7th verb following it in verbs_df)
     new_verbs_list = {}
     for original_word, lemmatized_word in original_to_lemmatized.items():
         matching_rows = verbs_df[verbs_df['word'].str.upper()
@@ -45,16 +41,6 @@ def process_text(text, data):
             new_verbs_list[original_word] = new_verb
         else:
             new_verbs_list[original_word] = original_word
-
-    print(new_verbs_list)
-
-    # # Replacement
-    # pattern = r'\b(?:{})\b'.format(
-    #     '|'.join(map(re.escape, lemmatized_verbs.values())))
-    # new_text = re.sub(pattern, lambda match: new_verbs_list.get(
-    #     match.group(0).upper(), match.group(0)), text, flags=re.IGNORECASE)
-
-    # return new_text
 
     def replace_func(match):
         word = match.group(0)
@@ -68,32 +54,20 @@ def process_text(text, data):
 
 
 def lambda_handler(event, context):
-    # Extract text and dictionary from event
+    """AWS Lambda function handler."""
+    # Assuming the event contains the S3 bucket and object key for the dictionary,
+    # and the text to process.
+    bucket_name = event['bucket_name']
+    object_key = event['object_key']
     text = event['text']
-    dictionary_data = event['dictionary']
 
-    # Process the text
+    dictionary_data = load_dictionary_from_s3(bucket_name, object_key)
+
     new_text = process_text(text, dictionary_data)
 
-    # Return the processed text
     return {
         'statusCode': 200,
         'body': json.dumps({
             'transformed_text': new_text
         })
     }
-
-
-def main(text):
-    dictionary_data = load_dictionary('dictionary.json')
-    new_text = process_text(text, dictionary_data)
-    print(new_text)
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python script.py 'input_string'")
-        sys.exit(1)
-
-    input_text = sys.argv[1]
-    main(input_text)
